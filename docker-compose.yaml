@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Bot Telegram Service
   telegram-bot:
@@ -20,12 +18,12 @@ services:
       - NODE_ENV=production
       - WEBHOOK_MODE=${WEBHOOK_MODE:-false}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
-      - WEBHOOK_PORT=${WEBHOOK_PORT:-3000}
+      - WEBHOOK_PORT=${WEBHOOK_PORT:-8095}
     volumes:
       - ./database:/app/database
       - ./logs:/app/logs
     ports:
-      - "${WEBHOOK_PORT:-3000}:3000"
+      - "${WEBHOOK_PORT:-8095}:3000"
     networks:
       - bot-network
     logging:
