@@ -305,7 +305,21 @@ async def process_updates():
 
 async def setup_webhook(app, webhook_url):
     """Setup webhook with Telegram"""
-    try:update_queue
+    try:
+        await app.bot.set_webhook(url=webhook_url)
+        logger.info(f"Webhook set to: {webhook_url}")
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+        raise
+
+def run_async_loop(loop):
+    """Run asyncio event loop in background thread"""
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+def main():
+    """Main function"""
+    global application
     
     token = os.getenv('BOT_TOKEN')
     if not token:
@@ -334,7 +348,7 @@ async def setup_webhook(app, webhook_url):
         logger.info(f"Starting bot in WEBHOOK mode")
         logger.info(f"Webhook URL: {webhook_url}")
         
-        # Create and start event loop in background thread
+        # Create event loop
         loop = asyncio.new_event_loop()
         
         async def initialize():
@@ -352,24 +366,7 @@ async def setup_webhook(app, webhook_url):
         loop_thread = threading.Thread(target=run_async_loop, args=(loop,), daemon=True)
         loop_thread.start()
         
-        logger.info(f"Event loop started in background"
-        webhook_port = int(os.getenv('WEBHOOK_PORT', 8080))
-        
-        if not webhook_url:
-            raise ValueError("WEBHOOK_URL required for webhook mode")
-        
-        # Initialize bot and set webhook
-        logger.info(f"Starting bot in WEBHOOK mode")
-        logger.info(f"Webhook URL: {webhook_url}")
-        
-        # Create event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Initialize application
-        loop.run_until_complete(application.initialize())
-        loop.run_until_complete(setup_webhook(application, webhook_url))
-        loop.run_until_complete(application.start())
+        logger.info(f"Event loop started in background")
         
         # Run Flask (blocking)
         logger.info(f"Flask listening on 0.0.0.0:{webhook_port}")
