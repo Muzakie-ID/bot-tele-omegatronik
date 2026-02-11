@@ -87,7 +87,51 @@ npm run dev
 npm start
 ```
 
-### Menggunakan PM2 (Recommended untuk Server)
+### Menggunakan Docker (Recommended untuk Server) 🐳
+
+Docker mempermudah deployment dan mendukung webhook mode untuk callback.
+
+**Quick Start:**
+
+```bash
+# Windows
+docker-run.bat
+
+# Linux/Mac
+chmod +x docker-run.sh
+./docker-run.sh
+```
+
+**Manual Docker Commands:**
+
+```bash
+# 1. Build image
+docker-compose build
+
+# 2. Start bot (Polling Mode)
+docker-compose up -d
+
+# 3. View logs
+docker-compose logs -f telegram-bot
+
+# 4. Stop bot
+docker-compose down
+```
+
+**Webhook Mode (untuk callback):**
+
+```bash
+# Edit .env
+WEBHOOK_MODE=true
+WEBHOOK_URL=https://yourdomain.com/webhook
+
+# Start dengan Nginx reverse proxy
+docker-compose --profile webhook up -d
+```
+
+📖 **Panduan lengkap Docker:** Lihat [DOCKER.md](DOCKER.md)
+
+### Menggunakan PM2
 
 ```bash
 # Install PM2 globally (jika belum)
