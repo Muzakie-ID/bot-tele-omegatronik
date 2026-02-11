@@ -1,0 +1,33 @@
+{
+  "name": "bot-tele-auto-order",
+  "version": "1.0.0",
+  "description": "Telegram Bot untuk Auto Order Produk Digital via Omega Tronik H2H",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop bot-tele-order",
+    "pm2:restart": "pm2 restart bot-tele-order",
+    "pm2:logs": "pm2 logs bot-tele-order"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "h2h",
+    "omegatronik",
+    "pulsa",
+    "ppob"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.7",
+    "dotenv": "^16.4.1",
+    "node-telegram-bot-api": "^0.66.0",
+    "better-sqlite3": "^9.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}
