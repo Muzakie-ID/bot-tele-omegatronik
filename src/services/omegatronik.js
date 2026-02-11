@@ -68,12 +68,11 @@ class OmegatronikService {
       );
       
       const params = {
+        product: 'SALDO',
         memberID: this.memberId,
         sign: sign
       };
       
-      // For check balance, we might need different endpoint or method
-      // Sesuaikan dengan dokumentasi aktual
       const response = await this.makeRequest(params);
       
       return {
