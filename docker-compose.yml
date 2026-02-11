@@ -9,6 +9,9 @@ services:
       - "8095:8080"
     volumes:
       - ./logs:/app/logs
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep 'python' || exit 1"]
       interval: 30s
