@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
@@ -18,10 +19,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-# Flask app for webhook
+# Global variables
 flask_app = Flask(__name__)
 application = None
-loop = None
+update_queue = asyncio.Queue()
 
 # Initialize service
 omega_service = OmegatronikService(
@@ -278,12 +279,12 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle webhook updates from Telegram"""
-    if request.method == 'POST':
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
+    if rtry:
+            update = Update.de_json(request.get_json(force=True), application.bot)
+            asyncio.run_coroutine_threadsafe(update_queue.put(update), application.bot._loop)
+            logger.info(f"Received update: {update.update_id}")
+        except Exception as e:
+            logger.error(f"Error processing webhook: {e}")
     return jsonify({'ok': True})
 
 @flask_app.route('/health', methods=['GET'])
@@ -292,20 +293,19 @@ def health():
     mode = 'webhook' if os.getenv('WEBHOOK_MODE', 'false').lower() == 'true' else 'polling'
     return jsonify({'status': 'ok', 'mode': mode})
 
+async def process_updates():
+    """Process updates from queue"""
+    while True:
+        try:
+            update = await update_queue.get()
+            logger.info(f"Processing update: {update.update_id}")
+            await application.process_update(update)
+        except Exception as e:
+            logger.error(f"Error processing update: {e}")
+
 async def setup_webhook(app, webhook_url):
     """Setup webhook with Telegram"""
-    try:
-        await app.bot.set_webhook(url=webhook_url)
-        webhook_info = await app.bot.get_webhook_info()
-        logger.info(f"Webhook set: {webhook_info.url}")
-        logger.info(f"Pending updates: {webhook_info.pending_update_count}")
-    except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-        raise
-
-def main():
-    """Start the bot"""
-    global application, loop
+    try:update_queue
     
     token = os.getenv('BOT_TOKEN')
     if not token:
@@ -325,6 +325,34 @@ def main():
     
     if webhook_mode:
         webhook_url = os.getenv('WEBHOOK_URL')
+        webhook_port = int(os.getenv('WEBHOOK_PORT', 8080))
+        
+        if not webhook_url:
+            raise ValueError("WEBHOOK_URL required for webhook mode")
+        
+        # Initialize bot and set webhook
+        logger.info(f"Starting bot in WEBHOOK mode")
+        logger.info(f"Webhook URL: {webhook_url}")
+        
+        # Create and start event loop in background thread
+        loop = asyncio.new_event_loop()
+        
+        async def initialize():
+            await application.initialize()
+            await setup_webhook(application, webhook_url)
+            await application.start()
+            # Start processing updates
+            asyncio.create_task(process_updates())
+        
+        # Run initialization
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(initialize())
+        
+        # Start event loop in background thread
+        loop_thread = threading.Thread(target=run_async_loop, args=(loop,), daemon=True)
+        loop_thread.start()
+        
+        logger.info(f"Event loop started in background"
         webhook_port = int(os.getenv('WEBHOOK_PORT', 8080))
         
         if not webhook_url:
