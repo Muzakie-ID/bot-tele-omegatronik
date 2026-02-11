@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Bot Telegram Service
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot-tele-omegatronik
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - OMEGA_MEMBER_ID=${OMEGA_MEMBER_ID}
+      - OMEGA_PIN=${OMEGA_PIN}
+      - OMEGA_PASSWORD=${OMEGA_PASSWORD}
+      - OMEGA_ENDPOINT=${OMEGA_ENDPOINT:-https://apiomega.id/}
+      - OMEGA_ENDPOINT_BACKUP=${OMEGA_ENDPOINT_BACKUP:-http://188.166.178.169:6969/}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - DB_PATH=/app/database/bot.db
+      - NODE_ENV=production
+      - WEBHOOK_MODE=${WEBHOOK_MODE:-false}
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - WEBHOOK_PORT=${WEBHOOK_PORT:-3000}
+    volumes:
+      - ./database:/app/database
+      - ./logs:/app/logs
+    ports:
+      - "${WEBHOOK_PORT:-3000}:3000"
+    networks:
+      - bot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Reverse Proxy (Optional - untuk webhook dengan SSL)
+  nginx:
+    image: nginx:alpine
+    container_name: bot-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      - bot-network
+    depends_on:
+      - telegram-bot
+    profiles:
+      - webhook
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  database:
+  logs:
