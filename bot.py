@@ -1,11 +1,11 @@
 import os
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 from services.omegatronik import OmegatronikService
-from flask import Flask, request
-import threading
+from flask import Flask, request, jsonify
 
 # Load environment variables
 load_dotenv()
@@ -16,10 +16,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 # Flask app for webhook
 flask_app = Flask(__name__)
 application = None
+loop = None
 
 # Initialize service
 omega_service = OmegatronikService(
@@ -278,22 +280,32 @@ def webhook():
     """Handle webhook updates from Telegram"""
     if request.method == 'POST':
         update = Update.de_json(request.get_json(force=True), application.bot)
-        application.update_queue.put(update)
-    return 'OK'
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        )
+    return jsonify({'ok': True})
 
 @flask_app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
-    return {'status': 'ok', 'mode': 'webhook' if os.getenv('WEBHOOK_MODE') == 'true' else 'polling'}
+    mode = 'webhook' if os.getenv('WEBHOOK_MODE', 'false').lower() == 'true' else 'polling'
+    return jsonify({'status': 'ok', 'mode': mode})
 
-def run_flask():
-    """Run Flask server in background thread"""
-    port = int(os.getenv('WEBHOOK_PORT', 8080))
-    flask_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+async def setup_webhook(app, webhook_url):
+    """Setup webhook with Telegram"""
+    try:
+        await app.bot.set_webhook(url=webhook_url)
+        webhook_info = await app.bot.get_webhook_info()
+        logger.info(f"Webhook set: {webhook_info.url}")
+        logger.info(f"Pending updates: {webhook_info.pending_update_count}")
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+        raise
 
 def main():
     """Start the bot"""
-    global application
+    global application, loop
     
     token = os.getenv('BOT_TOKEN')
     if not token:
@@ -313,28 +325,35 @@ def main():
     
     if webhook_mode:
         webhook_url = os.getenv('WEBHOOK_URL')
+        webhook_port = int(os.getenv('WEBHOOK_PORT', 8080))
+        
         if not webhook_url:
             raise ValueError("WEBHOOK_URL required for webhook mode")
         
-        # Start Flask in background
-        flask_thread = threading.Thread(target=run_flask, daemon=True)
-        flask_thread.start()
+        # Initialize bot and set webhook
+        logger.info(f"Starting bot in WEBHOOK mode")
+        logger.info(f"Webhook URL: {webhook_url}")
         
-        # Set webhook
-        logger.info(f"Setting webhook: {webhook_url}")
-        application.bot.set_webhook(url=webhook_url)
+        # Create event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        # Start application (non-blocking)
-        logger.info("Bot started in WEBHOOK mode")
-        application.run_webhook(
-            listen='0.0.0.0',
-            port=int(os.getenv('WEBHOOK_PORT', 8080)),
-            url_path='webhook',
-            webhook_url=webhook_url
+        # Initialize application
+        loop.run_until_complete(application.initialize())
+        loop.run_until_complete(setup_webhook(application, webhook_url))
+        loop.run_until_complete(application.start())
+        
+        # Run Flask (blocking)
+        logger.info(f"Flask listening on 0.0.0.0:{webhook_port}")
+        flask_app.run(
+            host='0.0.0.0',
+            port=webhook_port,
+            debug=False,
+            use_reloader=False
         )
     else:
         # Polling mode
-        logger.info("Bot started in POLLING mode")
+        logger.info("Starting bot in POLLING mode")
         application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
