@@ -1,7 +1,26 @@
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+venv/
+ENV/
+env/
+
+# Environment
 .env
-database/*.db
+
+# Logs
 logs/
 *.log
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Node.js (old)
+node_modules/
 package-lock.json
+package.json
+src/
