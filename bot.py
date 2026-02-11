@@ -279,12 +279,12 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle webhook updates from Telegram"""
-    if rtry:
-            update = Update.de_json(request.get_json(force=True), application.bot)
-            asyncio.run_coroutine_threadsafe(update_queue.put(update), application.bot._loop)
-            logger.info(f"Received update: {update.update_id}")
-        except Exception as e:
-            logger.error(f"Error processing webhook: {e}")
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        asyncio.run_coroutine_threadsafe(update_queue.put(update), application.bot._loop)
+        logger.info(f"Received update: {update.update_id}")
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
     return jsonify({'ok': True})
 
 @flask_app.route('/health', methods=['GET'])
