@@ -4,6 +4,7 @@ import asyncio
 import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.request import HTTPXRequest
 from dotenv import load_dotenv
 from services.omegatronik import OmegatronikService
 from flask import Flask, request, jsonify
@@ -317,16 +318,61 @@ def run_async_loop(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
+import socket
+import sys
+
+def check_connectivity():
+    """Check connectivity to Telegram API"""
+    target = "api.telegram.org"
+    port = 443
+    logger.info(f"Diagnostics: Checking connectivity to {target}...")
+    
+    # 1. DNS Resolution
+    try:
+        ip = socket.gethostbyname(target)
+        logger.info(f"Diagnostics: DNS Resolution successful: {target} -> {ip}")
+    except socket.gaierror as e:
+        logger.error(f"Diagnostics: DNS Resolution failed: {e}")
+        return False
+
+    # 2. TCP Connection
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        result = sock.connect_ex((ip, port))
+        if result == 0:
+            logger.info(f"Diagnostics: TCP Connection to {target}:{port} successful")
+        else:
+            logger.error(f"Diagnostics: TCP Connection failed with error code: {result}")
+            return False
+        sock.close()
+    except Exception as e:
+        logger.error(f"Diagnostics: Connection check failed: {e}")
+        return False
+        
+    return True
+
 def main():
     """Main function"""
     global application
+
+    # Run diagnostics
+    if not check_connectivity():
+        logger.warning("Diagnostics: Connectivity check failed, but attempting to start anyway...")
     
     token = os.getenv('BOT_TOKEN')
     if not token:
         raise ValueError("BOT_TOKEN not found in environment")
     
-    # Create application
-    application = Application.builder().token(token).build()
+    # Create application with increased timeouts
+    request = HTTPXRequest(
+        connection_pool_size=8,
+        connect_timeout=60.0,
+        read_timeout=60.0,
+        write_timeout=60.0,
+        pool_timeout=60.0
+    )
+    application = Application.builder().token(token).request(request).build()
     
     # Add handlers
     application.add_handler(CommandHandler("start", start))
