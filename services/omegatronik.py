@@ -69,6 +69,9 @@ class OmegatronikService:
             )
             
             params = {
+                'product': '',
+                'dest': '',
+                'refID': '',
                 'memberID': self.member_id,
                 'sign': sign
             }
