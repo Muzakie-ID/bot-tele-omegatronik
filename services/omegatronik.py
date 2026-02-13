@@ -1,10 +1,28 @@
 import requests
 import time
 import urllib3
+import ssl
+from requests.adapters import HTTPAdapter
+from urllib3.poolmanager import PoolManager
 from utils.signature import SignatureGenerator
 
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+class LegacyAdapter(HTTPAdapter):
+    """Adapter to handle legacy SSL/TLS servers with unsafe renegotiation support"""
+    def init_poolmanager(self, connections, maxsize, block=False):
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        # Downgrade security level to allow legacy server handshakes
+        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
+        self.poolmanager = PoolManager(
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            ssl_context=ctx
+        )
 
 class OmegatronikService:
     """Service for Omega Tronik H2H API integration"""
@@ -17,6 +35,10 @@ class OmegatronikService:
         self.password = password
         self.timeout = 30
         self.use_backup = False
+        
+        # Initialize session with legacy adapter
+        self.session = requests.Session()
+        self.session.mount('https://', LegacyAdapter())
     
     def _get_endpoint(self):
         """Get current endpoint"""
@@ -26,8 +48,8 @@ class OmegatronikService:
         """Make request to Omega Tronik API"""
         try:
             url = self._get_endpoint() + 'trx'
-            # Disable SSL verification to handle legacy server configs
-            response = requests.get(url, params=params, timeout=self.timeout, verify=False)
+            # Use session instead of direct requests
+            response = self.session.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
             return response.text
         except Exception as e:
