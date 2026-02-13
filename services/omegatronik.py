@@ -28,8 +28,8 @@ class OmegatronikService:
     """Service for Omega Tronik H2H API integration"""
     
     def __init__(self, member_id, pin, password):
-        self.endpoint = "https://gateway.omegatronik.com/api/"
-        self.endpoint_backup = "https://gtw.omegatronik.com/api/"
+        self.endpoint = "https://apiomega.id/api/"
+        self.endpoint_backup = "http://188.166.178.169:6969/"
         self.member_id = member_id
         self.pin = pin
         self.password = password
