@@ -327,6 +327,13 @@ def check_connectivity():
     port = 443
     logger.info(f"Diagnostics: Checking connectivity to {target}...")
     
+    # Check resolv.conf
+    try:
+        with open('/etc/resolv.conf', 'r') as f:
+            logger.info(f"Diagnostics: /etc/resolv.conf content:\n{f.read()}")
+    except Exception as e:
+        logger.warning(f"Diagnostics: Could not read /etc/resolv.conf: {e}")
+
     # 1. DNS Resolution
     try:
         ip = socket.gethostbyname(target)

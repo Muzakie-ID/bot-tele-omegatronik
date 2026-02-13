@@ -5,13 +5,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "8095:8080"
+    # Host network fix for DNS issues
+    network_mode: "host"
+    environment:
+      - WEBHOOK_PORT=8095
     volumes:
       - ./logs:/app/logs
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep 'python' || exit 1"]
       interval: 30s
