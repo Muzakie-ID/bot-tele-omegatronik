@@ -23,7 +23,8 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 # Global variables
 flask_app = Flask(__name__)
 application = None
-update_queue = asyncio.Queue()
+update_queue = None
+bot_loop = None
 
 # Initialize service
 omega_service = OmegatronikService(
@@ -280,10 +281,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle webhook updates from Telegram"""
+    global bot_loop, update_queue
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
-        asyncio.run_coroutine_threadsafe(update_queue.put(update), application.bot._loop)
-        logger.info(f"Received update: {update.update_id}")
+        if bot_loop and update_queue:
+            asyncio.run_coroutine_threadsafe(update_queue.put(update), bot_loop)
+            logger.info(f"Received update: {update.update_id}")
+        else:
+            logger.error("Webhook received but loop or queue not initialized")
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
     return jsonify({'ok': True})
@@ -296,11 +301,16 @@ def health():
 
 async def process_updates():
     """Process updates from queue"""
+    global update_queue
+    logger.info("Starting update processor...")
     while True:
         try:
-            update = await update_queue.get()
-            logger.info(f"Processing update: {update.update_id}")
-            await application.process_update(update)
+            if update_queue:
+                update = await update_queue.get()
+                logger.info(f"Processing update: {update.update_id}")
+                await application.process_update(update)
+            else:
+                await asyncio.sleep(1)
         except Exception as e:
             logger.error(f"Error processing update: {e}")
 
@@ -361,8 +371,8 @@ def check_connectivity():
 
 def main():
     """Main function"""
-    global application
-
+    global application, bot_loop, update_queue
+    
     # Run diagnostics
     if not check_connectivity():
         logger.warning("Diagnostics: Connectivity check failed, but attempting to start anyway...")
@@ -403,6 +413,11 @@ def main():
         
         # Create event loop
         loop = asyncio.new_event_loop()
+        bot_loop = loop
+        asyncio.set_event_loop(loop)
+        
+        # Initialize queue inside the loop
+        update_queue = asyncio.Queue()
         
         async def initialize():
             await application.initialize()
