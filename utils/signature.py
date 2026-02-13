@@ -33,8 +33,9 @@ class SignatureGenerator:
     
     @staticmethod
     def for_check_balance(member_id, pin, password):
-        """Generate signature for check balance"""
-        string = f"OtomaX|CheckBalance|{member_id}|{pin}|{password}"
+        """Generate signature for check balance (Empty format)"""
+        # Format: OtomaX|memberID||||pin|password
+        string = f"OtomaX|{member_id}||||{pin}|{password}"
         return SignatureGenerator.generate(string)
     
     @staticmethod
