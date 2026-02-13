@@ -1,6 +1,10 @@
 import requests
 import time
+import urllib3
 from utils.signature import SignatureGenerator
+
+# Suppress SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class OmegatronikService:
     """Service for Omega Tronik H2H API integration"""
@@ -22,7 +26,8 @@ class OmegatronikService:
         """Make request to Omega Tronik API"""
         try:
             url = self._get_endpoint() + 'trx'
-            response = requests.get(url, params=params, timeout=self.timeout)
+            # Disable SSL verification to handle legacy server configs
+            response = requests.get(url, params=params, timeout=self.timeout, verify=False)
             response.raise_for_status()
             return response.text
         except Exception as e:
