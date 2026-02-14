@@ -67,14 +67,26 @@ async def cek_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if result['success']:
         data = result['data']
         message = f"💰 *Informasi Saldo*\n\n"
-        message += f"Saldo: Rp {data.get('saldo', '0'):,}\n"
-        message += f"Status: {data.get('status', '-')}"
+        
+        # Check if balance data is available
+        if 'saldo' in data:
+            saldo = data.get('saldo', 0)
+            # Convert to int for formatting
+            try:
+                saldo_int = int(saldo)
+                message += f"Saldo: Rp {saldo_int}\n"
+            except (ValueError, TypeError):
+                message += f"Saldo: Rp {saldo}\n"
+            message += f"Status: {data.get('status', '-')}"
+        else:
+            # API returned OK without balance data
+            message += "Cek saldo berhasil!\n"
+            message += "Silakan cek dashboard untuk detail saldo."
         
         keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_utama")]]
         await query.edit_message_text(
             message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await query.edit_message_text(
