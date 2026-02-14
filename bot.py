@@ -1,13 +1,9 @@
 import os
 import logging
-import asyncio
-import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from telegram.request import HTTPXRequest
 from dotenv import load_dotenv
 from services.omegatronik import OmegatronikService
-from flask import Flask, request, jsonify
 
 # Load environment variables
 load_dotenv()
@@ -21,10 +17,7 @@ logger = logging.getLogger(__name__)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
 # Global variables
-flask_app = Flask(__name__)
 application = None
-update_queue = None
-bot_loop = None
 
 # Initialize service
 omega_service = OmegatronikService(
@@ -242,23 +235,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await back_to_menu(update, context)
 
 
-# Flask webhook endpoint
-@flask_app.route('/webhook', methods=['POST'])
-def webhook():
-    """Handle incoming webhook updates from Telegram"""
-    if update_queue:
-        update = Update.de_json(request.get_json(), application.bot)
-        update_queue.put(update)
-        return jsonify({'status': 'ok'})
-    return jsonify({'status': 'error', 'message': 'Update queue not initialized'}), 500
-
-
-def run_flask():
-    """Run Flask server in a separate thread"""
-    port = int(os.getenv('WEBHOOK_PORT', 8080))
-    flask_app.run(host='0.0.0.0', port=port, threaded=True)
-
-
 def main():
     """Main function to run the bot"""
     global application, update_queue, bot_loop
@@ -283,16 +259,10 @@ def main():
         # Webhook mode
         logger.info("Starting bot in webhook mode...")
         
-        update_queue = application.updater.update_queue
-        
-        # Start Flask server in a separate thread
-        flask_thread = threading.Thread(target=run_flask, daemon=True)
-        flask_thread.start()
-        
         # Set webhook
         application.run_webhook(
             listen='0.0.0.0',
-            port=int(os.getenv('WEBHOOK_PORT', 8080)),
+            port=int(os.getenv('WEBHOOK_PORT', 8095)),
             url_path='webhook',
             webhook_url=webhook_url
         )
