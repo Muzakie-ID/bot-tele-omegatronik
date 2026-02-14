@@ -30,7 +30,7 @@ class OmegatronikService:
         self.order_endpoint = f"{self.base_url}/trx"
         
         # Backup endpoints for failover
-        self.backup_base_url = "http://188.166.178.169:6969"
+        self.backup_base_url = "http://188.166.178.169:6969/https://apiomega.id"
         self.backup_balance_endpoint = f"{self.backup_base_url}/cek"
         self.backup_order_endpoint = f"{self.backup_base_url}/trx"
     
@@ -42,11 +42,11 @@ class OmegatronikService:
             Dict with 'success' (bool) and either 'data' or 'error'
         """
         try:
-            # DIAGNOSTIC: Test multiple signature formats and endpoints
+            # DIAGNOSTIC: Test multiple signature formats and endpoints with detailed response analysis
             logger.info("=== DIAGNOSTIC: Testing multiple balance check methods ===")
             
-            # Method 1: Current implementation
-            logger.info("\n--- Method 1: Current signature format ---")
+            # Method 1: Current implementation with full response details
+            logger.info("\n--- Method 1: Current signature format (Full Details) ---")
             signature1 = generate_signature(self.member_id, self.pin, self.password)
             params1 = {
                 "memberID": self.member_id,
@@ -56,22 +56,39 @@ class OmegatronikService:
             }
             logger.info(f"Signature: {signature1}")
             logger.info(f"Params: {params1}")
-            response1 = requests.get(self.balance_endpoint, params=params1, timeout=1)
-            logger.info(f"Response: {response1.text[:200]}")
+            logger.info(f"Full URL: {self.balance_endpoint}?memberID={self.member_id}&pin={self.pin}&password={self.password}&sign={signature1}")
+            response1 = requests.get(self.balance_endpoint, params=params1, timeout=5)
+            logger.info(f"Status Code: {response1.status_code}")
+            logger.info(f"Response Text: {response1.text}")
+            logger.info(f"Response Headers: {dict(response1.headers)}")
+            logger.info(f"Response Content-Type: {response1.headers.get('Content-Type', 'Not specified')}")
+            logger.info(f"Response Length: {len(response1.text)}")
             
-            # Method 2: Try without password in params
-            logger.info("\n--- Method 2: Without password in params ---")
-            params2 = {
-                "memberID": self.member_id,
-                "pin": self.pin,
-                "sign": signature1
-            }
-            logger.info(f"Params: {params2}")
-            response2 = requests.get(self.balance_endpoint, params=params2, timeout=1)
-            logger.info(f"Response: {response2.text[:200]}")
+            # Try to parse as JSON
+            try:
+                json_data = response1.json()
+                logger.info(f"JSON Data: {json_data}")
+            except:
+                logger.info("Response is not valid JSON")
             
-            # Method 3: Try different signature format (without "CheckBalance")
-            logger.info("\n--- Method 3: Different signature format ---")
+            # Method 2: Try backup endpoint with full details
+            logger.info("\n--- Method 2: Backup endpoint (Full Details) ---")
+            logger.info(f"Full URL: {self.backup_balance_endpoint}?memberID={self.member_id}&pin={self.pin}&password={self.password}&sign={signature1}")
+            response2 = requests.get(self.backup_balance_endpoint, params=params1, timeout=5)
+            logger.info(f"Status Code: {response2.status_code}")
+            logger.info(f"Response Text: {response2.text}")
+            logger.info(f"Response Headers: {dict(response2.headers)}")
+            logger.info(f"Response Content-Type: {response2.headers.get('Content-Type', 'Not specified')}")
+            
+            # Try to parse as JSON
+            try:
+                json_data = response2.json()
+                logger.info(f"JSON Data: {json_data}")
+            except:
+                logger.info("Response is not valid JSON")
+            
+            # Method 3: Try with different signature format
+            logger.info("\n--- Method 3: Different signature format (Full Details) ---")
             import hashlib
             import base64
             sig_string3 = f"OtomaX|{self.member_id}|{self.pin}|{self.password}"
@@ -83,35 +100,36 @@ class OmegatronikService:
                 "password": self.password,
                 "sign": signature3
             }
-            logger.info(f"Signature string: {sig_string3}")
+            logger.info(f"Signature String: {sig_string3}")
             logger.info(f"Signature: {signature3}")
-            response3 = requests.get(self.balance_endpoint, params=params3, timeout=1)
-            logger.info(f"Response: {response3.text[:200]}")
+            logger.info(f"Full URL: {self.balance_endpoint}?memberID={self.member_id}&pin={self.pin}&password={self.password}&sign={signature3}")
+            response3 = requests.get(self.balance_endpoint, params=params3, timeout=5)
+            logger.info(f"Status Code: {response3.status_code}")
+            logger.info(f"Response Text: {response3.text}")
+            logger.info(f"Response Headers: {dict(response3.headers)}")
             
-            # Method 4: Try backup endpoint
-            logger.info("\n--- Method 4: Backup endpoint ---")
-            response4 = requests.get(self.backup_balance_endpoint, params=params1, timeout=1)
-            logger.info(f"Response: {response4.text[:200]}")
+            # Try to parse as JSON
+            try:
+                json_data = response3.json()
+                logger.info(f"JSON Data: {json_data}")
+            except:
+                logger.info("Response is not valid JSON")
             
-            # Method 5: Try POST method
-            logger.info("\n--- Method 5: POST method ---")
-            response5 = requests.post(self.balance_endpoint, data=params1, timeout=1)
-            logger.info(f"Response: {response5.text[:200]}")
+            # Method 4: Try POST method
+            logger.info("\n--- Method 4: POST method (Full Details) ---")
+            logger.info(f"POST URL: {self.balance_endpoint}")
+            logger.info(f"POST Data: {params1}")
+            response4 = requests.post(self.balance_endpoint, data=params1, timeout=5)
+            logger.info(f"Status Code: {response4.status_code}")
+            logger.info(f"Response Text: {response4.text}")
+            logger.info(f"Response Headers: {dict(response4.headers)}")
             
-            # Method 6: Try with different endpoint paths
-            logger.info("\n--- Method 6: Different endpoint paths ---")
-            test_endpoints = [
-                f"{self.base_url}/balance",
-                f"{self.base_url}/saldo",
-                f"{self.base_url}/cek_saldo",
-                f"{self.base_url}/api/cek",
-            ]
-            for endpoint in test_endpoints:
-                try:
-                    resp = requests.get(endpoint, params=params1, timeout=1)
-                    logger.info(f"{endpoint}: {resp.text[:100]}")
-                except:
-                    logger.info(f"{endpoint}: Failed")
+            # Try to parse as JSON
+            try:
+                json_data = response4.json()
+                logger.info(f"JSON Data: {json_data}")
+            except:
+                logger.info("Response is not valid JSON")
             
             logger.info("\n=== DIAGNOSTIC COMPLETE ===")
             logger.info("Please review the logs above to identify the correct method")
