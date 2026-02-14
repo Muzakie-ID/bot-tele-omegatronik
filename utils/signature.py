@@ -6,7 +6,8 @@ def generate_signature(member_id: str, pin: str, password: str) -> str:
     """
     Generate signature for Omega Tronik API authentication (Check Balance).
     
-    Format: OtomaX|CheckBalance|{memberId}|{pin}|{password}
+    Format: OtomaX|{memberID}||||{pin}|{password}
+    Note: For balance check, product, dest, and refID are empty
     
     Args:
         member_id: Your Omega Tronik member ID
@@ -16,7 +17,7 @@ def generate_signature(member_id: str, pin: str, password: str) -> str:
     Returns:
         str: Base64 encoded SHA1 signature
     """
-    signature_string = f"OtomaX|CheckBalance|{member_id}|{pin}|{password}"
+    signature_string = f"OtomaX|{member_id}||||{pin}|{password}"
     
     # Generate SHA1 hash
     sha1_hash = hashlib.sha1(signature_string.encode()).digest()

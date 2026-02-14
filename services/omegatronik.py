@@ -42,102 +42,162 @@ class OmegatronikService:
             Dict with 'success' (bool) and either 'data' or 'error'
         """
         try:
-            # DIAGNOSTIC: Test multiple signature formats and endpoints with detailed response analysis
-            logger.info("=== DIAGNOSTIC: Testing multiple balance check methods ===")
+            signature = generate_signature(self.member_id, self.pin, self.password)
             
-            # Method 1: Current implementation with full response details
-            logger.info("\n--- Method 1: Current signature format (Full Details) ---")
-            signature1 = generate_signature(self.member_id, self.pin, self.password)
-            params1 = {
+            # For balance check, use empty product, dest, and refID
+            params = {
                 "memberID": self.member_id,
                 "pin": self.pin,
                 "password": self.password,
-                "sign": signature1
+                "product": "",
+                "dest": "",
+                "refID": "",
+                "sign": signature
             }
-            logger.info(f"Signature: {signature1}")
-            logger.info(f"Params: {params1}")
-            logger.info(f"Full URL: {self.balance_endpoint}?memberID={self.member_id}&pin={self.pin}&password={self.password}&sign={signature1}")
-            response1 = requests.get(self.balance_endpoint, params=params1, timeout=5)
-            logger.info(f"Status Code: {response1.status_code}")
-            logger.info(f"Response Text: {response1.text}")
-            logger.info(f"Response Headers: {dict(response1.headers)}")
-            logger.info(f"Response Content-Type: {response1.headers.get('Content-Type', 'Not specified')}")
-            logger.info(f"Response Length: {len(response1.text)}")
             
-            # Try to parse as JSON
-            try:
-                json_data = response1.json()
-                logger.info(f"JSON Data: {json_data}")
-            except:
-                logger.info("Response is not valid JSON")
+            # Debug logging
+            logger.info(f"=== BALANCE REQUEST DEBUG ===")
+            logger.info(f"Endpoint: {self.balance_endpoint}")
+            logger.info(f"Params: {params}")
+            logger.info(f"Signature: {signature}")
             
-            # Method 2: Try backup endpoint with full details
-            logger.info("\n--- Method 2: Backup endpoint (Full Details) ---")
-            logger.info(f"Full URL: {self.backup_balance_endpoint}?memberID={self.member_id}&pin={self.pin}&password={self.password}&sign={signature1}")
-            response2 = requests.get(self.backup_balance_endpoint, params=params1, timeout=5)
-            logger.info(f"Status Code: {response2.status_code}")
-            logger.info(f"Response Text: {response2.text}")
-            logger.info(f"Response Headers: {dict(response2.headers)}")
-            logger.info(f"Response Content-Type: {response2.headers.get('Content-Type', 'Not specified')}")
+            response = requests.get(self.balance_endpoint, params=params, timeout=30)
             
-            # Try to parse as JSON
-            try:
-                json_data = response2.json()
-                logger.info(f"JSON Data: {json_data}")
-            except:
-                logger.info("Response is not valid JSON")
+            logger.info(f"=== BALANCE RESPONSE DEBUG ===")
+            logger.info(f"Status Code: {response.status_code}")
+            logger.info(f"Headers: {dict(response.headers)}")
+            logger.info(f"Response Content: {response.text}")
             
-            # Method 3: Try with different signature format
-            logger.info("\n--- Method 3: Different signature format (Full Details) ---")
-            import hashlib
-            import base64
-            sig_string3 = f"OtomaX|{self.member_id}|{self.pin}|{self.password}"
-            sha1_hash3 = hashlib.sha1(sig_string3.encode()).digest()
-            signature3 = base64.b64encode(sha1_hash3).decode().rstrip('=').replace('/', '_').replace('+', '-')
-            params3 = {
-                "memberID": self.member_id,
-                "pin": self.pin,
-                "password": self.password,
-                "sign": signature3
-            }
-            logger.info(f"Signature String: {sig_string3}")
-            logger.info(f"Signature: {signature3}")
-            logger.info(f"Full URL: {self.balance_endpoint}?memberID={self.member_id}&pin={self.pin}&password={self.password}&sign={signature3}")
-            response3 = requests.get(self.balance_endpoint, params=params3, timeout=5)
-            logger.info(f"Status Code: {response3.status_code}")
-            logger.info(f"Response Text: {response3.text}")
-            logger.info(f"Response Headers: {dict(response3.headers)}")
-            
-            # Try to parse as JSON
-            try:
-                json_data = response3.json()
-                logger.info(f"JSON Data: {json_data}")
-            except:
-                logger.info("Response is not valid JSON")
-            
-            # Method 4: Try POST method
-            logger.info("\n--- Method 4: POST method (Full Details) ---")
-            logger.info(f"POST URL: {self.balance_endpoint}")
-            logger.info(f"POST Data: {params1}")
-            response4 = requests.post(self.balance_endpoint, data=params1, timeout=5)
-            logger.info(f"Status Code: {response4.status_code}")
-            logger.info(f"Response Text: {response4.text}")
-            logger.info(f"Response Headers: {dict(response4.headers)}")
-            
-            # Try to parse as JSON
-            try:
-                json_data = response4.json()
-                logger.info(f"JSON Data: {json_data}")
-            except:
-                logger.info("Response is not valid JSON")
-            
-            logger.info("\n=== DIAGNOSTIC COMPLETE ===")
-            logger.info("Please review the logs above to identify the correct method")
-            
-            # Return error with diagnostic info
+            if response.status_code == 200:
+                # Try to parse as JSON first
+                try:
+                    data = response.json()
+                    logger.info(f"Parsed JSON: {data}")
+                    
+                    # Check for success status
+                    if data.get("status") == "success" or data.get("status") == "20":
+                        return {
+                            "success": True,
+                            "data": {
+                                "saldo": data.get("balance", data.get("saldo", 0)),
+                                "status": data.get("account_status", "active"),
+                                "message": data.get("message", "Success")
+                            }
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "error": data.get("message", data.get("keterangan", "Unknown error"))
+                        }
+                except ValueError:
+                    logger.info("Response is not JSON, trying plain text parsing")
+                
+                # Check if response is plain text with balance
+                response_text = response.text.strip()
+                
+                # If response is just "OK", it might mean success but no balance data
+                if response_text == "OK":
+                    return {
+                        "success": True,
+                        "data": {
+                            "message": "Balance check successful",
+                            "note": "Balance information not returned in response"
+                        }
+                    }
+                
+                # Check if response contains error messages
+                if "Invalid" in response_text or "Error" in response_text or "Gagal" in response_text:
+                    return {
+                        "success": False,
+                        "error": response_text
+                    }
+                
+                # Try to parse as pipe-delimited format (common in H2H APIs)
+                # Format: status|balance|message
+                if "|" in response_text:
+                    parts = response_text.split("|")
+                    if len(parts) >= 2:
+                        status = parts[0]
+                        balance = parts[1] if len(parts) > 1 else "0"
+                        message = parts[2] if len(parts) > 2 else ""
+                        
+                        if status == "20" or status == "success":
+                            return {
+                                "success": True,
+                                "data": {
+                                    "saldo": balance,
+                                    "status": "active",
+                                    "message": message
+                                }
+                            }
+                        else:
+                            return {
+                                "success": False,
+                                "error": message or f"Status: {status}"
+                            }
+                
+                # If we can't parse the response, return it as-is
+                return {
+                    "success": False,
+                    "error": f"Unable to parse response: {response_text[:200]}"
+                }
+            else:
+                # Try backup endpoint
+                logger.warning("Primary endpoint failed, trying backup...")
+                response = requests.get(self.backup_balance_endpoint, params=params, timeout=30)
+                
+                logger.info(f"=== BACKUP BALANCE RESPONSE DEBUG ===")
+                logger.info(f"Status Code: {response.status_code}")
+                logger.info(f"Response Content: {response.text}")
+                
+                if response.status_code == 200:
+                    # Try JSON parsing
+                    try:
+                        data = response.json()
+                        if data.get("status") == "success" or data.get("status") == "20":
+                            return {
+                                "success": True,
+                                "data": {
+                                    "saldo": data.get("balance", data.get("saldo", 0)),
+                                    "status": data.get("account_status", "active")
+                                }
+                            }
+                    except ValueError:
+                        pass
+                    
+                    # Try pipe-delimited parsing
+                    response_text = response.text.strip()
+                    if "|" in response_text:
+                        parts = response_text.split("|")
+                        if len(parts) >= 2 and (parts[0] == "20" or parts[0] == "success"):
+                            return {
+                                "success": True,
+                                "data": {
+                                    "saldo": parts[1],
+                                    "status": "active"
+                                }
+                            }
+                
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {response.text}"
+                }
+                
+        except requests.exceptions.Timeout:
             return {
                 "success": False,
-                "error": "Balance check diagnostic complete. Please check logs for details."
+                "error": "Request timeout. Please try again."
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                "success": False,
+                "error": f"Connection error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Error checking balance: {e}")
+            return {
+                "success": False,
+                "error": f"Unexpected error: {str(e)}"
             }
                 
         except requests.exceptions.Timeout:
