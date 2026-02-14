@@ -66,6 +66,15 @@ class OmegatronikService:
             logger.info(f"Response Content: {response.text}")
             
             if response.status_code == 200:
+                # Check if response is plain text success
+                if response.text.strip() == "OK":
+                    return {
+                        "success": True,
+                        "data": {
+                            "message": "Success"
+                        }
+                    }
+                
                 # Check if response is plain text error
                 if "Invalid" in response.text or "Error" in response.text:
                     return {
@@ -241,6 +250,15 @@ class OmegatronikService:
                 logger.info(f"Response Content: {response.text}")
                 
                 if response.status_code == 200:
+                    # Check if response is plain text success
+                    if response.text.strip() == "OK":
+                        return {
+                            "success": True,
+                            "data": {
+                                "message": "Success"
+                            }
+                        }
+                    
                     if "Invalid" in response.text or "Error" in response.text:
                         return {
                             "success": False,
