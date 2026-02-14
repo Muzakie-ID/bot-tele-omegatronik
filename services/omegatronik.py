@@ -50,9 +50,18 @@ class OmegatronikService:
                 "signature": signature
             }
             
+            # Debug logging
+            logger.info(f"=== BALANCE REQUEST DEBUG ===")
+            logger.info(f"Endpoint: {self.balance_endpoint}")
+            logger.info(f"Payload: {payload}")
+            logger.info(f"Signature: {signature}")
+            
             response = requests.post(self.balance_endpoint, json=payload, timeout=30)
             
-            logger.info(f"Balance API Response - Status: {response.status_code}, Content: {response.text[:500]}")
+            logger.info(f"=== BALANCE RESPONSE DEBUG ===")
+            logger.info(f"Status Code: {response.status_code}")
+            logger.info(f"Headers: {dict(response.headers)}")
+            logger.info(f"Response Content: {response.text}")
             
             if response.status_code == 200:
                 try:
@@ -140,9 +149,18 @@ class OmegatronikService:
                 "signature": signature
             }
             
+            # Debug logging
+            logger.info(f"=== ORDER REQUEST DEBUG ===")
+            logger.info(f"Endpoint: {self.order_endpoint}")
+            logger.info(f"Payload: {payload}")
+            logger.info(f"Signature: {signature}")
+            
             response = requests.post(self.order_endpoint, json=payload, timeout=60)
             
-            logger.info(f"Order API Response - Status: {response.status_code}, Content: {response.text[:500]}")
+            logger.info(f"=== ORDER RESPONSE DEBUG ===")
+            logger.info(f"Status Code: {response.status_code}")
+            logger.info(f"Headers: {dict(response.headers)}")
+            logger.info(f"Response Content: {response.text}")
             
             if response.status_code == 200:
                 try:
