@@ -50,8 +50,18 @@ class OmegatronikService:
             
             response = requests.post(self.balance_endpoint, json=payload, timeout=30)
             
+            logger.info(f"Balance API Response - Status: {response.status_code}, Content: {response.text[:500]}")
+            
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as e:
+                    logger.error(f"Failed to parse JSON response: {e}")
+                    return {
+                        "success": False,
+                        "error": f"Invalid API response: {response.text[:200]}"
+                    }
+                
                 if data.get("status") == "success":
                     return {
                         "success": True,
@@ -128,8 +138,18 @@ class OmegatronikService:
             
             response = requests.post(self.order_endpoint, json=payload, timeout=60)
             
+            logger.info(f"Order API Response - Status: {response.status_code}, Content: {response.text[:500]}")
+            
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as e:
+                    logger.error(f"Failed to parse JSON response: {e}")
+                    return {
+                        "success": False,
+                        "error": f"Invalid API response: {response.text[:200]}"
+                    }
+                
                 if data.get("status") == "success":
                     return {
                         "success": True,
