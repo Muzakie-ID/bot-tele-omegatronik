@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade OpenSSL to fix TLS issues
-RUN apt-get update && apt-get install -y --only-upgrade openssl libssl1.1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --only-upgrade openssl && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
 COPY requirements.txt .
