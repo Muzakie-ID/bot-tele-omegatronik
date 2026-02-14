@@ -43,7 +43,8 @@ class OmegatronikService:
         try:
             signature = generate_signature(self.member_id, self.pin, self.password)
             
-            payload = {
+            # Try with form data first (common for PHP APIs)
+            payload_form = {
                 "member_id": self.member_id,
                 "pin": self.pin,
                 "password": self.password,
@@ -53,10 +54,10 @@ class OmegatronikService:
             # Debug logging
             logger.info(f"=== BALANCE REQUEST DEBUG ===")
             logger.info(f"Endpoint: {self.balance_endpoint}")
-            logger.info(f"Payload: {payload}")
+            logger.info(f"Payload (Form): {payload_form}")
             logger.info(f"Signature: {signature}")
             
-            response = requests.post(self.balance_endpoint, json=payload, timeout=30)
+            response = requests.post(self.balance_endpoint, data=payload_form, timeout=30)
             
             logger.info(f"=== BALANCE RESPONSE DEBUG ===")
             logger.info(f"Status Code: {response.status_code}")
@@ -64,6 +65,14 @@ class OmegatronikService:
             logger.info(f"Response Content: {response.text}")
             
             if response.status_code == 200:
+                # Check if response is plain text error
+                if "Invalid" in response.text or "Error" in response.text:
+                    return {
+                        "success": False,
+                        "error": response.text.strip()
+                    }
+                
+                # Try to parse as JSON
                 try:
                     data = response.json()
                 except ValueError as e:
@@ -140,7 +149,8 @@ class OmegatronikService:
                 self.member_id, self.pin, self.password, destination, product_code
             )
             
-            payload = {
+            # Try with form data first (common for PHP APIs)
+            payload_form = {
                 "member_id": self.member_id,
                 "pin": self.pin,
                 "password": self.password,
@@ -152,10 +162,10 @@ class OmegatronikService:
             # Debug logging
             logger.info(f"=== ORDER REQUEST DEBUG ===")
             logger.info(f"Endpoint: {self.order_endpoint}")
-            logger.info(f"Payload: {payload}")
+            logger.info(f"Payload (Form): {payload_form}")
             logger.info(f"Signature: {signature}")
             
-            response = requests.post(self.order_endpoint, json=payload, timeout=60)
+            response = requests.post(self.order_endpoint, data=payload_form, timeout=60)
             
             logger.info(f"=== ORDER RESPONSE DEBUG ===")
             logger.info(f"Status Code: {response.status_code}")
@@ -163,6 +173,14 @@ class OmegatronikService:
             logger.info(f"Response Content: {response.text}")
             
             if response.status_code == 200:
+                # Check if response is plain text error
+                if "Invalid" in response.text or "Error" in response.text:
+                    return {
+                        "success": False,
+                        "error": response.text.strip()
+                    }
+                
+                # Try to parse as JSON
                 try:
                     data = response.json()
                 except ValueError as e:
