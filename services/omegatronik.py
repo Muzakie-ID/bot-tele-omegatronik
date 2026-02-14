@@ -45,6 +45,8 @@ class OmegatronikService:
             
             payload = {
                 "member_id": self.member_id,
+                "pin": self.pin,
+                "password": self.password,
                 "signature": signature
             }
             
@@ -131,6 +133,8 @@ class OmegatronikService:
             
             payload = {
                 "member_id": self.member_id,
+                "pin": self.pin,
+                "password": self.password,
                 "destination": destination,
                 "product_code": product_code,
                 "signature": signature

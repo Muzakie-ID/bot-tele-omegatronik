@@ -1,13 +1,12 @@
 import hashlib
-import time
+import base64
 
 
 def generate_signature(member_id: str, pin: str, password: str) -> str:
     """
-    Generate signature for Omega Tronik API authentication.
+    Generate signature for Omega Tronik API authentication (Check Balance).
     
-    The signature is typically generated using MD5 hash of:
-    member_id + pin + password + timestamp
+    Format: OtomaX|CheckBalance|{memberId}|{pin}|{password}
     
     Args:
         member_id: Your Omega Tronik member ID
@@ -15,11 +14,22 @@ def generate_signature(member_id: str, pin: str, password: str) -> str:
         password: Your API password
         
     Returns:
-        str: MD5 signature hash
+        str: Base64 encoded SHA1 signature
     """
-    timestamp = str(int(time.time()))
-    signature_string = f"{member_id}{pin}{password}{timestamp}"
-    signature = hashlib.md5(signature_string.encode()).hexdigest()
+    signature_string = f"OtomaX|CheckBalance|{member_id}|{pin}|{password}"
+    
+    # Generate SHA1 hash
+    sha1_hash = hashlib.sha1(signature_string.encode()).digest()
+    
+    # Base64 encode
+    signature = base64.b64encode(sha1_hash).decode()
+    
+    # Remove trailing '='
+    signature = signature.rstrip('=')
+    
+    # Replace '/' with '_' and '+' with '-'
+    signature = signature.replace('/', '_').replace('+', '-')
+    
     return signature
 
 
@@ -27,6 +37,8 @@ def generate_order_signature(member_id: str, pin: str, password: str,
                             destination: str, product_code: str) -> str:
     """
     Generate signature for order transaction.
+    
+    Format: OtomaX|{memberId}|{product}|{dest}|{ref}|pin|{password}
     
     Args:
         member_id: Your Omega Tronik member ID
@@ -36,9 +48,24 @@ def generate_order_signature(member_id: str, pin: str, password: str,
         product_code: Product code to order
         
     Returns:
-        str: MD5 signature hash
+        str: Base64 encoded SHA1 signature
     """
-    timestamp = str(int(time.time()))
-    signature_string = f"{member_id}{pin}{password}{destination}{product_code}{timestamp}"
-    signature = hashlib.md5(signature_string.encode()).hexdigest()
+    # Generate reference ID (can be timestamp or random)
+    import time
+    ref_id = str(int(time.time()))
+    
+    signature_string = f"OtomaX|{member_id}|{product_code}|{destination}|{ref_id}|{pin}|{password}"
+    
+    # Generate SHA1 hash
+    sha1_hash = hashlib.sha1(signature_string.encode()).digest()
+    
+    # Base64 encode
+    signature = base64.b64encode(sha1_hash).decode()
+    
+    # Remove trailing '='
+    signature = signature.rstrip('=')
+    
+    # Replace '/' with '_' and '+' with '-'
+    signature = signature.replace('/', '_').replace('+', '-')
+    
     return signature
