@@ -18,6 +18,7 @@ class OmegatronikService:
             member_id: Your Omega Tronik member ID
             pin: Your transaction PIN
             password: Your API password
+
         """
         self.member_id = member_id
         self.pin = pin
@@ -25,13 +26,13 @@ class OmegatronikService:
         
         # API endpoints
         self.base_url = "https://apiomega.id"
-        self.balance_endpoint = f"{self.base_url}/balance"
-        self.order_endpoint = f"{self.base_url}/order"
+        self.balance_endpoint = f"{self.base_url}/cek"
+        self.order_endpoint = f"{self.base_url}/trx"
         
         # Backup endpoints for failover
         self.backup_base_url = "http://188.166.178.169:6969"
-        self.backup_balance_endpoint = f"{self.backup_base_url}/balance"
-        self.backup_order_endpoint = f"{self.backup_base_url}/order"
+        self.backup_balance_endpoint = f"{self.backup_base_url}/cek"
+        self.backup_order_endpoint = f"{self.backup_base_url}/trx"
     
     async def check_balance(self) -> Dict[str, Any]:
         """
@@ -43,21 +44,21 @@ class OmegatronikService:
         try:
             signature = generate_signature(self.member_id, self.pin, self.password)
             
-            # Try with form data first (common for PHP APIs)
-            payload_form = {
-                "member_id": self.member_id,
+            # Build query string for GET request
+            params = {
+                "memberID": self.member_id,
                 "pin": self.pin,
                 "password": self.password,
-                "signature": signature
+                "sign": signature
             }
             
             # Debug logging
             logger.info(f"=== BALANCE REQUEST DEBUG ===")
             logger.info(f"Endpoint: {self.balance_endpoint}")
-            logger.info(f"Payload (Form): {payload_form}")
+            logger.info(f"Params: {params}")
             logger.info(f"Signature: {signature}")
             
-            response = requests.post(self.balance_endpoint, data=payload_form, timeout=30)
+            response = requests.get(self.balance_endpoint, params=params, timeout=30)
             
             logger.info(f"=== BALANCE RESPONSE DEBUG ===")
             logger.info(f"Status Code: {response.status_code}")
@@ -98,10 +99,27 @@ class OmegatronikService:
             else:
                 # Try backup endpoint
                 logger.warning("Primary endpoint failed, trying backup...")
-                response = requests.post(self.backup_balance_endpoint, json=payload, timeout=30)
+                response = requests.get(self.backup_balance_endpoint, params=params, timeout=30)
+                
+                logger.info(f"=== BACKUP BALANCE RESPONSE DEBUG ===")
+                logger.info(f"Status Code: {response.status_code}")
+                logger.info(f"Response Content: {response.text}")
                 
                 if response.status_code == 200:
-                    data = response.json()
+                    if "Invalid" in response.text or "Error" in response.text:
+                        return {
+                            "success": False,
+                            "error": response.text.strip()
+                        }
+                    
+                    try:
+                        data = response.json()
+                    except ValueError as e:
+                        return {
+                            "success": False,
+                            "error": f"Invalid API response: {response.text[:200]}"
+                        }
+                    
                     if data.get("status") == "success":
                         return {
                             "success": True,
@@ -145,27 +163,32 @@ class OmegatronikService:
             Dict with 'success' (bool) and either 'data' or 'error'
         """
         try:
+            import time
+            ref_id = str(int(time.time()))
+            
             signature = generate_order_signature(
                 self.member_id, self.pin, self.password, destination, product_code
             )
             
-            # Try with form data first (common for PHP APIs)
-            payload_form = {
-                "member_id": self.member_id,
+            # Build query string for GET request
+            params = {
+                "memberID": self.member_id,
                 "pin": self.pin,
                 "password": self.password,
-                "destination": destination,
-                "product_code": product_code,
-                "signature": signature
+                "dest": destination,
+                "product": product_code,
+                "qty": "1",
+                "refID": ref_id,
+                "sign": signature
             }
             
             # Debug logging
             logger.info(f"=== ORDER REQUEST DEBUG ===")
             logger.info(f"Endpoint: {self.order_endpoint}")
-            logger.info(f"Payload (Form): {payload_form}")
+            logger.info(f"Params: {params}")
             logger.info(f"Signature: {signature}")
             
-            response = requests.post(self.order_endpoint, data=payload_form, timeout=60)
+            response = requests.get(self.order_endpoint, params=params, timeout=60)
             
             logger.info(f"=== ORDER RESPONSE DEBUG ===")
             logger.info(f"Status Code: {response.status_code}")
@@ -195,8 +218,8 @@ class OmegatronikService:
                         "success": True,
                         "data": {
                             "trx_id": data.get("trx_id"),
-                            "destination": data.get("destination"),
-                            "product_code": data.get("product_code"),
+                            "destination": data.get("dest"),
+                            "product_code": data.get("product"),
                             "product_name": data.get("product_name"),
                             "price": data.get("price"),
                             "status": data.get("status"),
@@ -211,17 +234,34 @@ class OmegatronikService:
             else:
                 # Try backup endpoint
                 logger.warning("Primary endpoint failed, trying backup...")
-                response = requests.post(self.backup_order_endpoint, json=payload, timeout=60)
+                response = requests.get(self.backup_order_endpoint, params=params, timeout=60)
+                
+                logger.info(f"=== BACKUP ORDER RESPONSE DEBUG ===")
+                logger.info(f"Status Code: {response.status_code}")
+                logger.info(f"Response Content: {response.text}")
                 
                 if response.status_code == 200:
-                    data = response.json()
+                    if "Invalid" in response.text or "Error" in response.text:
+                        return {
+                            "success": False,
+                            "error": response.text.strip()
+                        }
+                    
+                    try:
+                        data = response.json()
+                    except ValueError as e:
+                        return {
+                            "success": False,
+                            "error": f"Invalid API response: {response.text[:200]}"
+                        }
+                    
                     if data.get("status") == "success":
                         return {
                             "success": True,
                             "data": {
                                 "trx_id": data.get("trx_id"),
-                                "destination": data.get("destination"),
-                                "product_code": data.get("product_code"),
+                                "destination": data.get("dest"),
+                                "product_code": data.get("product"),
                                 "product_name": data.get("product_name"),
                                 "price": data.get("price"),
                                 "status": data.get("status"),
