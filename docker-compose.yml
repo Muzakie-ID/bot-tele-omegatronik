@@ -1,19 +1,19 @@
+version: '3.8'
+
 services:
-  telegram-bot:
+  bot:
     build: .
-    container_name: bot-telegram-omega
+    container_name: bot-tele-auto-order
     restart: unless-stopped
     env_file:
       - .env
-    # Host network fix for DNS issues
-    network_mode: "host"
-    environment:
-      - WEBHOOK_PORT=8095
+    ports:
+      - "${WEBHOOK_PORT:-8080}:8080"
     volumes:
       - ./logs:/app/logs
-    healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep 'python' || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge

@@ -1,199 +1,192 @@
 import requests
-import time
-import urllib3
-import ssl
-from requests.adapters import HTTPAdapter
-from urllib3.poolmanager import PoolManager
-from utils.signature import SignatureGenerator
+import logging
+from typing import Dict, Any
+from utils.signature import generate_signature, generate_order_signature
 
-# Suppress SSL warnings
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-class LegacyAdapter(HTTPAdapter):
-    """Adapter to handle legacy SSL/TLS servers with unsafe renegotiation support"""
-    def init_poolmanager(self, connections, maxsize, block=False):
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        # Downgrade security level to allow legacy server handshakes
-        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
-        self.poolmanager = PoolManager(
-            num_pools=connections,
-            maxsize=maxsize,
-            block=block,
-            ssl_context=ctx
-        )
+logger = logging.getLogger(__name__)
+
 
 class OmegatronikService:
-    """Service for Omega Tronik H2H API integration"""
+    """Service for interacting with Omega Tronik H2H API"""
     
-    def __init__(self, member_id, pin, password):
-        self.endpoint = "https://apiomega.id/api/"
-        self.endpoint_backup = "http://188.166.178.169:6969/"
+    def __init__(self, member_id: str, pin: str, password: str):
+        """
+        Initialize Omega Tronik service
+        
+        Args:
+            member_id: Your Omega Tronik member ID
+            pin: Your transaction PIN
+            password: Your API password
+        """
         self.member_id = member_id
         self.pin = pin
         self.password = password
-        self.timeout = 30
-        self.use_backup = False
         
-        # Initialize session with legacy adapter
-        self.session = requests.Session()
-        self.session.mount('https://', LegacyAdapter())
+        # API endpoints (update with actual Omega Tronik endpoints)
+        self.base_url = "https://api.omegatronik.com"
+        self.balance_endpoint = f"{self.base_url}/balance"
+        self.order_endpoint = f"{self.base_url}/order"
+        
+        # Backup endpoints for failover
+        self.backup_base_url = "https://backup.omegatronik.com"
+        self.backup_balance_endpoint = f"{self.backup_base_url}/balance"
+        self.backup_order_endpoint = f"{self.backup_base_url}/order"
     
-    def _get_endpoint(self):
-        """Get current endpoint"""
-        return self.endpoint_backup if self.use_backup else self.endpoint
-    
-    def _make_request(self, params, retry=True):
-        """Make request to Omega Tronik API"""
+    async def check_balance(self) -> Dict[str, Any]:
+        """
+        Check account balance
+        
+        Returns:
+            Dict with 'success' (bool) and either 'data' or 'error'
+        """
         try:
-            url = self._get_endpoint() + 'trx'
-            # Use session instead of direct requests
-            response = self.session.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-            return response.text
-        except Exception as e:
-            if retry and not self.use_backup:
-                print(f"Primary endpoint failed, trying backup... Error: {str(e)}")
-                self.use_backup = True
-                return self._make_request(params, retry=False)
-            raise e
-    
-    async def check_balance(self):
-        """Check account balance"""
-        try:
-            sign = SignatureGenerator.for_check_balance(
-                self.member_id,
-                self.pin,
-                self.password
-            )
+            signature = generate_signature(self.member_id, self.pin, self.password)
             
-            params = {
-                'product': '',
-                'dest': '',
-                'refID': '',
-                'memberID': self.member_id,
-                'sign': sign
+            payload = {
+                "member_id": self.member_id,
+                "signature": signature
             }
             
-            response = self._make_request(params)
+            response = requests.post(self.balance_endpoint, json=payload, timeout=30)
             
-            # Parse response (format: status|saldo|message)
-            parts = response.split('|')
-            if len(parts) >= 2:
-                return {
-                    'success': True,
-                    'data': {
-                        'status': parts[0],
-                        'saldo': parts[1] if len(parts) > 1 else '0',
-                        'message': parts[2] if len(parts) > 2 else ''
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return {
+                        "success": True,
+                        "data": {
+                            "saldo": data.get("balance", 0),
+                            "status": data.get("account_status", "active")
+                        }
                     }
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': response
-                }
-        except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    async def list_products(self, product_code, dest):
-        """List available products (Cuanku System)"""
-        try:
-            ref_id = f"LIST{int(time.time() * 1000)}"
-            sign = SignatureGenerator.for_transaction(
-                self.member_id,
-                product_code,
-                dest,
-                ref_id,
-                self.pin,
-                self.password
-            )
-            
-            params = {
-                'product': product_code,
-                'dest': dest,
-                'refID': ref_id,
-                'memberID': self.member_id,
-                'sign': sign
-            }
-            
-            response = self._make_request(params)
-            
-            # Parse product list
-            products = []
-            lines = response.strip().split('\n')
-            
-            for line in lines:
-                parts = line.split('|')
-                if len(parts) >= 3:
-                    products.append({
-                        'id': parts[0],
-                        'nama': parts[1],
-                        'harga': int(parts[2]) if parts[2].isdigit() else 0
-                    })
-            
-            return {
-                'success': True,
-                'products': products
-            }
-        except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    async def transaction(self, product_code, dest, product_id=None):
-        """Execute transaction"""
-        try:
-            ref_id = f"TRX{int(time.time() * 1000)}"
-            sign = SignatureGenerator.for_transaction(
-                self.member_id,
-                product_code,
-                dest,
-                ref_id,
-                self.pin,
-                self.password
-            )
-            
-            params = {
-                'product': product_code,
-                'dest': dest,
-                'refID': ref_id,
-                'memberID': self.member_id,
-                'sign': sign
-            }
-            
-            if product_id:
-                params['idproduk'] = product_id
-            
-            response = self._make_request(params)
-            
-            # Parse response
-            parts = response.split('|')
-            if len(parts) >= 2 and parts[0].upper() in ['SUCCESS', 'SUKSES']:
-                return {
-                    'success': True,
-                    'data': {
-                        'status': parts[0],
-                        'refid': parts[1] if len(parts) > 1 else ref_id,
-                        'produk': parts[2] if len(parts) > 2 else '',
-                        'tujuan': dest,
-                        'harga': parts[3] if len(parts) > 3 else '0',
-                        'sn': parts[4] if len(parts) > 4 else '',
-                        'saldo': parts[5] if len(parts) > 5 else '0'
+                else:
+                    return {
+                        "success": False,
+                        "error": data.get("message", "Unknown error")
                     }
-                }
             else:
+                # Try backup endpoint
+                logger.warning("Primary endpoint failed, trying backup...")
+                response = requests.post(self.backup_balance_endpoint, json=payload, timeout=30)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "success":
+                        return {
+                            "success": True,
+                            "data": {
+                                "saldo": data.get("balance", 0),
+                                "status": data.get("account_status", "active")
+                            }
+                        }
+                
                 return {
-                    'success': False,
-                    'error': response
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {response.text}"
                 }
-        except Exception as e:
+                
+        except requests.exceptions.Timeout:
             return {
-                'success': False,
-                'error': str(e)
+                "success": False,
+                "error": "Request timeout. Please try again."
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                "success": False,
+                "error": f"Connection error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Error checking balance: {e}")
+            return {
+                "success": False,
+                "error": f"Unexpected error: {str(e)}"
+            }
+    
+    async def order_product(self, destination: str, product_code: str) -> Dict[str, Any]:
+        """
+        Order a product
+        
+        Args:
+            destination: Destination number (phone number, meter ID, etc.)
+            product_code: Product code to order
+            
+        Returns:
+            Dict with 'success' (bool) and either 'data' or 'error'
+        """
+        try:
+            signature = generate_order_signature(
+                self.member_id, self.pin, self.password, destination, product_code
+            )
+            
+            payload = {
+                "member_id": self.member_id,
+                "destination": destination,
+                "product_code": product_code,
+                "signature": signature
+            }
+            
+            response = requests.post(self.order_endpoint, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return {
+                        "success": True,
+                        "data": {
+                            "trx_id": data.get("trx_id"),
+                            "destination": data.get("destination"),
+                            "product_code": data.get("product_code"),
+                            "product_name": data.get("product_name"),
+                            "price": data.get("price"),
+                            "status": data.get("status"),
+                            "message": data.get("message")
+                        }
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": data.get("message", "Unknown error")
+                    }
+            else:
+                # Try backup endpoint
+                logger.warning("Primary endpoint failed, trying backup...")
+                response = requests.post(self.backup_order_endpoint, json=payload, timeout=60)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "success":
+                        return {
+                            "success": True,
+                            "data": {
+                                "trx_id": data.get("trx_id"),
+                                "destination": data.get("destination"),
+                                "product_code": data.get("product_code"),
+                                "product_name": data.get("product_name"),
+                                "price": data.get("price"),
+                                "status": data.get("status"),
+                                "message": data.get("message")
+                            }
+                        }
+                
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {response.text}"
+                }
+                
+        except requests.exceptions.Timeout:
+            return {
+                "success": False,
+                "error": "Request timeout. Please try again."
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                "success": False,
+                "error": f"Connection error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Error ordering product: {e}")
+            return {
+                "success": False,
+                "error": f"Unexpected error: {str(e)}"
             }

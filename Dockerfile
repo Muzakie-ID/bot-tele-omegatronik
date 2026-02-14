@@ -1,16 +1,25 @@
 FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
 
-# Install dependencies
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file
 COPY requirements.txt .
-RUN apt-get update && \
-    apt-get install -y iputils-ping curl ca-certificates dnsutils && \
-    update-ca-certificates && \
-    pip install --no-cache-dir -r requirements.txt
 
-# Copy application
-COPY . .
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Run bot
-CMD ["python", "-u", "bot.py"]
+# Copy application files
+COPY bot .
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Run the bot
+CMD ["python", "bot.py"]

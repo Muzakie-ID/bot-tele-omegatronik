@@ -36,17 +36,20 @@ omega_service = OmegatronikService(
 # User sessions
 user_sessions = {}
 
+# Constants for session states
+STATE_WAITING_DESTINATION = 'waiting_destination'
+STATE_WAITING_PRODUCT_CODE = 'waiting_product_code'
+
+
 def get_main_menu():
     """Generate main menu keyboard"""
     keyboard = [
         [InlineKeyboardButton("💰 Cek Saldo", callback_data="cek_saldo")],
-        [InlineKeyboardButton("📱 Pulsa", callback_data="pulsa"),
-         InlineKeyboardButton("📶 Paket Data", callback_data="paket_data")],
-        [InlineKeyboardButton("🎮 Voucher Game", callback_data="voucher_game"),
-         InlineKeyboardButton("💡 PLN", callback_data="pln")],
+        [InlineKeyboardButton("📦 Order Produk", callback_data="order_produk")],
         [InlineKeyboardButton("❓ Bantuan", callback_data="bantuan")]
     ]
     return InlineKeyboardMarkup(keyboard)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
@@ -57,6 +60,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Silakan pilih menu di bawah:",
         reply_markup=get_main_menu()
     )
+
 
 async def cek_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check balance handler"""
@@ -88,366 +92,215 @@ async def cek_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]])
         )
 
-async def handle_product_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle product category selection"""
+
+async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start order process - ask for destination"""
     query = update.callback_query
     await query.answer()
     
-    category = query.data
     user_id = update.effective_user.id
     
-    # Store category in session
-    if user_id not in user_sessions:
-        user_sessions[user_id] = {}
-    user_sessions[user_id]['category'] = category
-    user_sessions[user_id]['step'] = 'input_nomor'
-    
-    category_names = {
-        'pulsa': '📱 Pulsa',
-        'paket_data': '📶 Paket Data',
-        'voucher_game': '🎮 Voucher Game',
-        'pln': '💡 PLN'
+    # Set session state
+    user_sessions[user_id] = {
+        'state': STATE_WAITING_DESTINATION
     }
     
     await query.edit_message_text(
-        f"{category_names.get(category, category)}\n\n"
-        "Silakan masukkan nomor/ID tujuan:",
+        "📦 *Order Produk*\n\n"
+        "Silakan masukkan nomor tujuan:\n"
+        "(Nomor HP, ID PLN, dll.)",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ Batal", callback_data="menu_utama")
-        ]])
+            InlineKeyboardButton("🔙 Batal", callback_data="menu_utama")
+        ]]),
+        parse_mode='Markdown'
     )
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle user messages"""
+    """Handle text messages for order process"""
     user_id = update.effective_user.id
+    text = update.message.text
     
     if user_id not in user_sessions:
         await update.message.reply_text(
-            "Silakan pilih menu terlebih dahulu dengan /start"
+            "Silakan mulai dengan /start",
+            reply_markup=get_main_menu()
         )
         return
     
     session = user_sessions[user_id]
     
-    if session.get('step') == 'input_nomor':
-        nomor = update.message.text
-        session['nomor'] = nomor
-        session['step'] = 'show_products'
+    if session['state'] == STATE_WAITING_DESTINATION:
+        # Store destination and ask for product code
+        session['destination'] = text
+        session['state'] = STATE_WAITING_PRODUCT_CODE
         
         await update.message.reply_text(
-            f"⏳ Mengambil daftar produk untuk {nomor}..."
+            f"📱 Nomor tujuan: {text}\n\n"
+            "Silakan masukkan kode produk:",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Batal", callback_data="menu_utama")
+            ]])
         )
+    
+    elif session['state'] == STATE_WAITING_PRODUCT_CODE:
+        # Process order
+        destination = session['destination']
+        product_code = text
         
-        # Get product list based on category
-        category = session['category']
-        product_codes = {
-            'pulsa': 'LISTDX',
-            'paket_data': 'LISTDX',
-            'voucher_game': 'LISTSAKTI',
-            'pln': 'LISTPLN'
-        }
+        await update.message.reply_text("⏳ Memproses order...")
         
-        product_code = product_codes.get(category, 'LISTDX')
-        result = await omega_service.list_products(product_code, nomor)
+        result = await omega_service.order_product(destination, product_code)
         
-        if result['success'] and result['products']:
-            products = result['products'][:10]  # Limit to 10
-            keyboard = []
-            
-            for product in products:
-                button_text = f"{product['nama']} - Rp {product['harga']:,}"
-                callback_data = f"buy_{product['id']}"
-                keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
-            
-            keyboard.append([InlineKeyboardButton("❌ Batal", callback_data="menu_utama")])
+        if result['success']:
+            data = result['data']
+            message = f"✅ *Order Berhasil!*\n\n"
+            message += f"Trx ID: {data.get('trx_id', '-')}\n"
+            message += f"Tujuan: {data.get('destination', '-')}\n"
+            message += f"Produk: {data.get('product_name', data.get('product_code', '-'))}\n"
+            message += f"Harga: Rp {data.get('price', 0):,}\n"
+            message += f"Status: {data.get('status', '-')}\n"
+            message += f"Pesan: {data.get('message', '-')}"
             
             await update.message.reply_text(
-                "Pilih produk:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                message,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔙 Menu Utama", callback_data="menu_utama")
+                ]]),
+                parse_mode='Markdown'
             )
         else:
             await update.message.reply_text(
-                f"❌ Gagal mengambil produk: {result.get('error', 'Unknown error')}",
+                f"❌ *Order Gagal*\n\n"
+                f"Error: {result['error']}\n\n"
+                "Silakan coba lagi.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔙 Kembali", callback_data="menu_utama")
-                ]])
+                    InlineKeyboardButton("🔙 Menu Utama", callback_data="menu_utama")
+                ]]),
+                parse_mode='Markdown'
             )
+        
+        # Clear session
+        del user_sessions[user_id]
 
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle callback queries"""
+
+async def show_bantuan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show help message"""
     query = update.callback_query
-    data = query.data
+    await query.answer()
     
-    if data == "menu_utama":
-        await query.answer()
-        await query.edit_message_text(
-            "🏠 Menu Utama\n\nSilakan pilih menu:",
-            reply_markup=get_main_menu()
-        )
-    elif data == "cek_saldo":
-        await cek_saldo(update, context)
-    elif data in ['pulsa', 'paket_data', 'voucher_game', 'pln']:
-        await handle_product_category(update, context)
-    elif data.startswith('buy_'):
-        await handle_buy_product(update, context)
-    elif data == "bantuan":
-        await query.answer()
-        await query.edit_message_text(
-            "❓ *Bantuan*\n\n"
-            "Bot ini untuk auto order produk digital melalui Omega Tronik H2H.\n\n"
-            "Fitur:\n"
-            "- Cek Saldo\n"
-            "- Order Pulsa\n"
-            "- Order Paket Data\n"
-            "- Order Voucher Game\n"
-            "- Order PLN\n\n"
-            "Hubungi admin jika ada kendala.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Kembali", callback_data="menu_utama")
-            ]]),
-            parse_mode='Markdown'
-        )
+    help_text = "❓ *Bantuan*\n\n"
+    help_text += "📋 *Fitur Bot:*\n"
+    help_text += "• 💰 Cek Saldo - Cek saldo akun Omega Tronik\n"
+    help_text += "• 📦 Order Produk - Order produk digital\n\n"
+    help_text += "📝 *Cara Order:*\n"
+    help_text += "1. Pilih menu Order Produk\n"
+    help_text += "2. Masukkan nomor tujuan\n"
+    help_text += "3. Masukkan kode produk\n"
+    help_text += "4. Tunggu konfirmasi order\n\n"
+    help_text += "📞 *Hubungi Admin:* @admin_username"
+    
+    keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_utama")]]
+    await query.edit_message_text(
+        help_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
 
-async def handle_buy_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle product purchase"""
+
+async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Return to main menu"""
     query = update.callback_query
     await query.answer()
     
     user_id = update.effective_user.id
-    product_id = query.data.replace('buy_', '')
     
-    if user_id not in user_sessions:
-        await query.edit_message_text(
-            "Session expired. Silakan /start lagi.",
-            reply_markup=get_main_menu()
-        )
-        return
-    
-    session = user_sessions[user_id]
-    nomor = session.get('nomor')
-    category = session.get('category')
-    
-    await query.edit_message_text("⏳ Memproses transaksi...")
-    
-    # Determine product code
-    product_codes = {
-        'pulsa': 'DX',
-        'paket_data': 'DX',
-        'voucher_game': 'SAKTI',
-        'pln': 'PLN'
-    }
-    
-    product_code = product_codes.get(category, 'DX')
-    
-    # Execute transaction
-    result = await omega_service.transaction(
-        product_code=product_code,
-        dest=nomor,
-        product_id=product_id
-    )
-    
-    if result['success']:
-        data = result['data']
-        message = "✅ *Transaksi Berhasil!*\n\n"
-        message += f"Produk: {data.get('produk', '-')}\n"
-        message += f"Tujuan: {data.get('tujuan', nomor)}\n"
-        message += f"Harga: Rp {data.get('harga', 0):,}\n"
-        message += f"Ref ID: {data.get('refid', '-')}\n"
-        message += f"SN: {data.get('sn', '-')}"
-        
-        keyboard = [[InlineKeyboardButton("🔙 Menu Utama", callback_data="menu_utama")]]
-        await query.edit_message_text(
-            message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-    else:
-        await query.edit_message_text(
-            f"❌ Transaksi gagal: {result['error']}\n\n"
-            "Silakan coba lagi atau hubungi admin.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Menu Utama", callback_data="menu_utama")
-            ]])
-        )
-    
-    # Clear session
+    # Clear session if exists
     if user_id in user_sessions:
         del user_sessions[user_id]
+    
+    await query.edit_message_text(
+        "🤖 *Bot Auto Order Omega Tronik*\n\n"
+        "Silakan pilih menu:",
+        reply_markup=get_main_menu(),
+        parse_mode='Markdown'
+    )
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle errors"""
-    logger.error(f"Update {update} caused error {context.error}")
 
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all callback queries"""
+    query = update.callback_query
+    data = query.data
+    
+    if data == "cek_saldo":
+        await cek_saldo(update, context)
+    elif data == "order_produk":
+        await start_order(update, context)
+    elif data == "bantuan":
+        await show_bantuan(update, context)
+    elif data == "menu_utama":
+        await back_to_menu(update, context)
+
+
+# Flask webhook endpoint
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
-    """Handle webhook updates from Telegram"""
-    global bot_loop, update_queue
-    try:
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        if bot_loop and update_queue:
-            asyncio.run_coroutine_threadsafe(update_queue.put(update), bot_loop)
-            logger.info(f"Received update: {update.update_id}")
-        else:
-            logger.error("Webhook received but loop or queue not initialized")
-    except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-    return jsonify({'ok': True})
+    """Handle incoming webhook updates from Telegram"""
+    if update_queue:
+        update = Update.de_json(request.get_json(), application.bot)
+        update_queue.put(update)
+        return jsonify({'status': 'ok'})
+    return jsonify({'status': 'error', 'message': 'Update queue not initialized'}), 500
 
-@flask_app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint"""
-    mode = 'webhook' if os.getenv('WEBHOOK_MODE', 'false').lower() == 'true' else 'polling'
-    return jsonify({'status': 'ok', 'mode': mode})
 
-async def process_updates():
-    """Process updates from queue"""
-    global update_queue
-    logger.info("Starting update processor...")
-    while True:
-        try:
-            if update_queue:
-                update = await update_queue.get()
-                logger.info(f"Processing update: {update.update_id}")
-                await application.process_update(update)
-            else:
-                await asyncio.sleep(1)
-        except Exception as e:
-            logger.error(f"Error processing update: {e}")
+def run_flask():
+    """Run Flask server in a separate thread"""
+    port = int(os.getenv('WEBHOOK_PORT', 8080))
+    flask_app.run(host='0.0.0.0', port=port, threaded=True)
 
-async def setup_webhook(app, webhook_url):
-    """Setup webhook with Telegram"""
-    try:
-        await app.bot.set_webhook(url=webhook_url)
-        logger.info(f"Webhook set to: {webhook_url}")
-    except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-        raise
-
-def run_async_loop(loop):
-    """Run asyncio event loop in background thread"""
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
-
-import socket
-import sys
-
-def check_connectivity():
-    """Check connectivity to Telegram API"""
-    target = "api.telegram.org"
-    port = 443
-    logger.info(f"Diagnostics: Checking connectivity to {target}...")
-    
-    # Check resolv.conf
-    try:
-        with open('/etc/resolv.conf', 'r') as f:
-            logger.info(f"Diagnostics: /etc/resolv.conf content:\n{f.read()}")
-    except Exception as e:
-        logger.warning(f"Diagnostics: Could not read /etc/resolv.conf: {e}")
-
-    # 1. DNS Resolution
-    try:
-        ip = socket.gethostbyname(target)
-        logger.info(f"Diagnostics: DNS Resolution successful: {target} -> {ip}")
-    except socket.gaierror as e:
-        logger.error(f"Diagnostics: DNS Resolution failed: {e}")
-        return False
-
-    # 2. TCP Connection
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
-        result = sock.connect_ex((ip, port))
-        if result == 0:
-            logger.info(f"Diagnostics: TCP Connection to {target}:{port} successful")
-        else:
-            logger.error(f"Diagnostics: TCP Connection failed with error code: {result}")
-            return False
-        sock.close()
-    except Exception as e:
-        logger.error(f"Diagnostics: Connection check failed: {e}")
-        return False
-        
-    return True
 
 def main():
-    """Main function"""
-    global application, bot_loop, update_queue
+    """Main function to run the bot"""
+    global application, update_queue, bot_loop
     
-    # Run diagnostics
-    if not check_connectivity():
-        logger.warning("Diagnostics: Connectivity check failed, but attempting to start anyway...")
+    bot_token = os.getenv('BOT_TOKEN')
+    webhook_mode = os.getenv('WEBHOOK_MODE', 'false').lower() == 'true'
+    webhook_url = os.getenv('WEBHOOK_URL', '')
     
-    token = os.getenv('BOT_TOKEN')
-    if not token:
-        raise ValueError("BOT_TOKEN not found in environment")
+    if not bot_token:
+        logger.error("BOT_TOKEN not found in environment variables")
+        return
     
-    # Create application with increased timeouts
-    request = HTTPXRequest(
-        connection_pool_size=8,
-        connect_timeout=60.0,
-        read_timeout=60.0,
-        write_timeout=60.0,
-        pool_timeout=60.0
-    )
-    application = Application.builder().token(token).request(request).build()
+    # Create application
+    application = Application.builder().token(bot_token).build()
     
-    # Add handlers
+    # Register handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_error_handler(error_handler)
-    
-    # Check mode
-    webhook_mode = os.getenv('WEBHOOK_MODE', 'false').lower() == 'true'
     
     if webhook_mode:
-        webhook_url = os.getenv('WEBHOOK_URL')
-        webhook_port = int(os.getenv('WEBHOOK_PORT', 8080))
+        # Webhook mode
+        logger.info("Starting bot in webhook mode...")
         
-        if not webhook_url:
-            raise ValueError("WEBHOOK_URL required for webhook mode")
+        update_queue = application.updater.update_queue
         
-        # Initialize bot and set webhook
-        logger.info(f"Starting bot in WEBHOOK mode")
-        logger.info(f"Webhook URL: {webhook_url}")
+        # Start Flask server in a separate thread
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
         
-        # Create event loop
-        loop = asyncio.new_event_loop()
-        bot_loop = loop
-        asyncio.set_event_loop(loop)
-        
-        # Initialize queue inside the loop
-        update_queue = asyncio.Queue()
-        
-        async def initialize():
-            await application.initialize()
-            await setup_webhook(application, webhook_url)
-            await application.start()
-            # Start processing updates
-            asyncio.create_task(process_updates())
-        
-        # Run initialization
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(initialize())
-        
-        # Start event loop in background thread
-        loop_thread = threading.Thread(target=run_async_loop, args=(loop,), daemon=True)
-        loop_thread.start()
-        
-        logger.info(f"Event loop started in background")
-        
-        # Run Flask (blocking)
-        logger.info(f"Flask listening on 0.0.0.0:{webhook_port}")
-        flask_app.run(
-            host='0.0.0.0',
-            port=webhook_port,
-            debug=False,
-            use_reloader=False
+        # Set webhook
+        application.run_webhook(
+            listen='0.0.0.0',
+            port=int(os.getenv('WEBHOOK_PORT', 8080)),
+            url_path='webhook',
+            webhook_url=webhook_url
         )
     else:
         # Polling mode
-        logger.info("Starting bot in POLLING mode")
+        logger.info("Starting bot in polling mode...")
         application.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == '__main__':
     main()
