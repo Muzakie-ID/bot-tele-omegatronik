@@ -23,13 +23,13 @@ class OmegatronikService:
         self.pin = pin
         self.password = password
         
-        # API endpoints (update with actual Omega Tronik endpoints)
-        self.base_url = "https://api.omegatronik.com"
+        # API endpoints
+        self.base_url = "https://apiomega.id"
         self.balance_endpoint = f"{self.base_url}/balance"
         self.order_endpoint = f"{self.base_url}/order"
         
         # Backup endpoints for failover
-        self.backup_base_url = "https://backup.omegatronik.com"
+        self.backup_base_url = "http://188.166.178.169:6969"
         self.backup_balance_endpoint = f"{self.backup_base_url}/balance"
         self.backup_order_endpoint = f"{self.backup_base_url}/order"
     
