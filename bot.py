@@ -262,7 +262,7 @@ def main():
         # Set webhook
         application.run_webhook(
             listen='0.0.0.0',
-            port=int(os.getenv('WEBHOOK_PORT', 8095)),
+            port=8095,
             url_path='webhook',
             webhook_url=webhook_url
         )

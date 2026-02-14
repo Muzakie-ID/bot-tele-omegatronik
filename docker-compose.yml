@@ -6,7 +6,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${WEBHOOK_PORT:-8095}:8080"
+      - "${WEBHOOK_PORT:-8095}:8095"
     volumes:
       - ./logs:/app/logs
     networks:
