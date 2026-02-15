@@ -44,7 +44,7 @@ class OmegatronikService:
         try:
             signature = generate_signature(self.member_id, self.pin, self.password)
             
-            # For balance check, use empty product, dest, and refID
+            # For balance check, include empty product, dest, and refID parameters
             params = {
                 "memberID": self.member_id,
                 "pin": self.pin,

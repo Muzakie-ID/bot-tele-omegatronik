@@ -7,7 +7,7 @@ def generate_signature(member_id: str, pin: str, password: str) -> str:
     Generate signature for Omega Tronik API authentication (Check Balance).
     
     Format: OtomaX|{memberID}||||{pin}|{password}
-    Note: For balance check, product, dest, and refID are empty
+    Note: For balance check, product, dest, and refID are empty (||||)
     
     Args:
         member_id: Your Omega Tronik member ID
