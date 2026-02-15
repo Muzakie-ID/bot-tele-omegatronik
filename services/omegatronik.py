@@ -26,12 +26,12 @@ class OmegatronikService:
         
         # API endpoints
         self.base_url = "https://apiomega.id"
-        self.balance_endpoint = f"{self.base_url}/cek"
+        self.balance_endpoint = f"{self.base_url}/CekSaldo"
         self.order_endpoint = f"{self.base_url}/trx"
         
         # Backup endpoints for failover
-        self.backup_base_url = "http://188.166.178.169:6969/https://apiomega.id"
-        self.backup_balance_endpoint = f"{self.backup_base_url}/cek"
+        self.backup_base_url = "http://188.166.178.169:6969"
+        self.backup_balance_endpoint = f"{self.backup_base_url}/CekSaldo"
         self.backup_order_endpoint = f"{self.backup_base_url}/trx"
     
     async def check_balance(self) -> Dict[str, Any]:
